@@ -87,14 +87,16 @@ def _conv_net(
     dilations = [1, 2, 4, 8] if dilations is None else dilations
     receptive_field = sum(dilations) + 1
     net = nn.Sequential()
-    net.add_module("expand", _Functional(partial(check_and_expand, receptive_field)))
+    # TRT seems to be unable to handle any type of functional layer, replaced with unsqueeze in forward method
+    # net.add_module("expand", _Functional(partial(check_and_expand, receptive_field)))
     cin = 1
     cout = channels
     for i, dilation in enumerate(dilations):
         net.add_module(f"block_{i}", block(cin, cout, dilation))
         cin = cout
     net.add_module("head", nn.Conv1d(channels, 1, 1))
-    net.add_module("flatten", nn.Flatten())
+    # exporting the flatten op using the dynamo_export results in a function layer which trt can't handle, replaced with reshape in forward method
+    # net.add_module("flatten", nn.Flatten())
     return net
 
 
@@ -274,7 +276,19 @@ class ConvNet(BaseNet):
         return params
 
     def _forward(self, x):
-        y = self._net(x)
+        # replaces custom expander functional layer since trt can't handle functional layers
+        y = x.unsqueeze(1)
+        # using the nn.sequential's forward method results in a single node in the onnx graph which is not supported by trt
+        # fortunately, manually forwarding the individual modules creates individual nodes in the onnx graph
+        # y = self._net(y)
+        for i, module in enumerate(self._net.modules()):
+            if isinstance(module, nn.Sequential):
+                continue
+            y = module(y)
+
+        # use reshape instead of flatten layer or squeeze op to avoid trt import error
+        y = y.reshape(y.shape[0], -1)
+
         if self._ir is not None:
             y = self._ir(y)
         return y

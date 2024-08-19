@@ -7,6 +7,7 @@ from pathlib import Path
 from time import time
 from typing import Optional, Union
 from warnings import warn
+import os
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -18,6 +19,9 @@ from torch.utils.data import DataLoader
 from nam.data import ConcatDataset, Split, init_dataset
 from nam.models import Model
 from nam.util import filter_warnings
+
+from torchvision import models
+from torchsummary import summary
 
 torch.manual_seed(0)
 
@@ -63,6 +67,7 @@ def _plot(
         tx = len(ds.x) / 48_000
         print(f"Run (t={tx:.2f})")
         t0 = time()
+        print(f"ds.x.shape={ds.x.shape}")
         output = model(ds.x).flatten().cpu().numpy()
         t1 = time()
         try:
@@ -168,6 +173,7 @@ def main(
         default_root_dir=outdir,
         **learning_config["trainer"],
     )
+    print("Training...")
     with filter_warnings("ignore", category=PossibleUserWarning):
         trainer.fit(
             model,
@@ -177,12 +183,14 @@ def main(
         )
     # Go to best checkpoint
     best_checkpoint = trainer.checkpoint_callback.best_model_path
+    print(f"Best checkpoint: {best_checkpoint}")
     if best_checkpoint != "":
         model = Model.load_from_checkpoint(
             trainer.checkpoint_callback.best_model_path,
             **Model.parse_config(model_config),
         )
     model.cpu()
+    print("Validating...")
     model.eval()
     if make_plots:
         _plot(
@@ -194,5 +202,42 @@ def main(
             show=False,
         )
         _plot(model, dataset_validation, show=not no_show)
+
+    print("Exporting onnx model...")
+    input_sample_size = 432000
+    # input_sample = torch.randn((1, 48))
+    # input_sample = torch.randn((1, max(model.net._get_dilations())))
+    input_sample = torch.randn((1, input_sample_size)).cpu()
+    # input_sample = model.net._export_input_signal()
+    summary(model, (input_sample_size,), device="cpu")
+    print(f"input_sample.shape={input_sample.shape}, receptive_field={model.net.receptive_field}, dilations = {model.net._get_dilations()}")
+    # weights = model.net._export_weights()
+
+    model.net.export_torch_state_dict(os.path.join(outdir, model_config["net"]["name"] + ".pth"))
+    model.net.export_onnx(os.path.join(outdir, model_config["net"]["name"] + ".onnx"), input_sample)
+    model.to_onnx(os.path.join(outdir, "model.onnx"), input_sample, export_params=True)
     # Export!
     model.net.export(outdir)
+
+
+def convert(model_config, source_type, target_type, source_path, outdir, input_sample_size):
+    model = Model.init_from_config(model_config)
+    if source_type == "checkpoint":
+        model = Model.load_from_checkpoint(
+            source_path,
+            **Model.parse_config(model_config),
+        )
+    elif source_type == "torch":
+        model.net.load_torch_state_dict(source_path)
+    else:
+        raise ValueError(f"Unknown source type {source_type}")
+
+    model.cpu()
+    model.eval()
+
+    if target_type == "torch":
+        model.net.export_torch_state_dict(os.path.join(outdir, model_config["net"]["name"] + ".pth"))
+    elif target_type == "onnx":
+        model.net.export_onnx(os.path.join(outdir, model_config["net"]["name"] + ".onnx"), torch.randn((1, input_sample_size)).cpu())
+    else:
+        raise ValueError(f"Unknown target type {target_type}")

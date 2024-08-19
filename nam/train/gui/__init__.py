@@ -36,7 +36,7 @@ try:  # 3rd-party and 1st-party imports
     from nam.train.metadata import TRAINING_KEY
 
     _install_is_valid = True
-    _HAVE_ACCELERATOR = torch.cuda.is_available() or torch.backends.mps.is_available()
+    _HAVE_ACCELERATOR = False# torch.cuda.is_available() or torch.backends.mps.is_available()
 except ImportError:
     _install_is_valid = False
     _HAVE_ACCELERATOR = False

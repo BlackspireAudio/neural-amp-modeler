@@ -103,6 +103,13 @@ class Exportable(abc.ABC):
         """
         pass
 
+    @abc.abstractmethod
+    def export_torch_state_dict(self, filename: Path):
+        """
+        Export model in PyTorch's format
+        """
+        pass
+
     def export_onnx(self, filename: Path):
         """
         Export model in format for ONNX Runtime

@@ -20,6 +20,11 @@ from .._core import InitializableFromConfig
 from ..data import wav_to_tensor
 from .exportable import Exportable
 
+import onnx
+import onnxruntime
+
+from ._names import *
+
 
 class _Base(nn.Module, InitializableFromConfig, Exportable):
     def __init__(self, sample_rate: Optional[float] = None):
@@ -139,6 +144,25 @@ class _Base(nn.Module, InitializableFromConfig, Exportable):
         """
         pass
 
+    def export_onnx(self, filename: str, input_sample: torch.tensor):
+        """
+        Export model in format for ONNX Runtime
+        """
+        export_options = torch.onnx.ExportOptions(
+            dynamic_shapes=True,
+
+            diagnostic_options=torch.onnx.DiagnosticOptions(verbosity_level=0)
+        )
+        # torch.onnx.export(self, input_sample, filename)
+        torch.onnx.dynamo_export(self, input_sample, export_options=export_options).save(filename)
+        onnx.checker.check_model(onnx.load(filename))
+
+    def export_torch_state_dict(self, filename: str):
+        torch.save(self.state_dict(), filename)
+
+    def load_torch_state_dict(self, filename: str):
+        self.load_state_dict(torch.load(filename))
+
     def _export_input_output_args(self) -> Tuple[Any]:
         """
         Create any other args necessesary (e.g. params to eval at)
@@ -177,7 +201,7 @@ class BaseNet(_Base):
             x = x[None]
         if pad_start:
             x = torch.cat(
-                (torch.zeros((len(x), self.receptive_field - 1)).to(x.device), x), dim=1
+                (torch.zeros((x.shape[0], self.receptive_field - 1)).to(x.device), x), dim=1
             )
         y = self._forward(x, **kwargs)
         if scalar:

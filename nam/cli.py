@@ -81,7 +81,7 @@ import json
 from argparse import ArgumentParser
 from pathlib import Path
 
-from nam.train.full import main as _nam_full
+from nam.train.full import main as _nam_full, convert
 from nam.train.gui import run as nam_gui  # noqa F401 Used as an entry point
 from nam.util import timestamp
 
@@ -97,8 +97,10 @@ def nam_full():
     args = parser.parse_args()
 
     def ensure_outdir(outdir: str) -> Path:
-        outdir = Path(outdir, timestamp())
-        outdir.mkdir(parents=True, exist_ok=False)
+        # outdir = Path(outdir, timestamp())
+        outdir = Path(outdir, "temp")
+        # outdir.mkdir(parents=True, exist_ok=False)
+        outdir.mkdir(parents=True, exist_ok=True)
         return outdir
 
     outdir = ensure_outdir(args.outdir)
@@ -110,3 +112,27 @@ def nam_full():
     with open(args.learning_config_path, "r") as fp:
         learning_config = json.load(fp)
     _nam_full(data_config, model_config, learning_config, outdir, args.no_show)
+
+
+def nam_convert():
+    parser = ArgumentParser()
+    parser.add_argument("model_config_path", type=str)
+    parser.add_argument("source_type", type=str)
+    parser.add_argument("target_type", type=str)
+    parser.add_argument("source_path", type=str)
+    parser.add_argument("outdir", type=str)
+    parser.add_argument("input_sample_size", type=int, nargs="?")
+    
+
+    args = parser.parse_args()
+
+    def ensure_outdir(outdir: str) -> Path:
+        outdir = Path(outdir)
+        outdir.mkdir(parents=True, exist_ok=True)
+        return outdir
+
+    outdir = ensure_outdir(args.outdir)
+    # Read
+    with open(args.model_config_path, "r") as fp:
+        model_config = json.load(fp)
+    convert(model_config, args.source_type, args.target_type, args.source_path, outdir, args.input_sample_size)
