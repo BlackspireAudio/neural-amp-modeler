@@ -148,13 +148,18 @@ class _Base(nn.Module, InitializableFromConfig, Exportable):
         """
         Export model in format for ONNX Runtime
         """
+        if input_sample.ndim != 2:
+            raise RuntimeError(f"Input sample must be 2D, but is {input_sample.ndim}D")
+        if input_sample.shape[1] <= self.receptive_field:
+            # if input_sample.shape[1] < self.receptive_field: the dynamic shape export starts to do weird stuff, since the tensor is too small by the time it reaches the last layers
+            raise RuntimeError(f"Input sample must have at least {self.receptive_field} samples, but has {input_sample.shape[1]}")
         export_options = torch.onnx.ExportOptions(
             dynamic_shapes=True,
 
             diagnostic_options=torch.onnx.DiagnosticOptions(verbosity_level=0)
         )
-        # torch.onnx.export(self, input_sample, filename)
-        torch.onnx.dynamo_export(self, input_sample, export_options=export_options).save(filename)
+        # pad_start=False since I to handle the receptive field outside of the model during real-time processing
+        torch.onnx.dynamo_export(self, input_sample, pad_start=False, export_options=export_options).save(filename)
         onnx.checker.check_model(onnx.load(filename))
 
     def export_torch_state_dict(self, filename: str):

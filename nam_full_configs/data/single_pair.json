@@ -14,8 +14,8 @@
         "ny": null
     },
     "common": {
-        "x_path": "C:\\path\\to\\source.wav",
-        "y_path": "C:\\path\\to\\target.wav",
+        "x_path": "/home/scso/git/nam/res/v3_0_0.wav",
+        "y_path": "/home/scso/git/nam/res/PEDAL-AMP.wav",
         "delay": 0
     }
 }

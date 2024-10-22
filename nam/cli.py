@@ -68,7 +68,7 @@ def _apply_extensions():
     if extensions_path_not_in_sys_path:
         for i, p in enumerate(sys.path):
             if p == extensions_path:
-                sys.path = sys.path[:i] + sys.path[i + 1 :]
+                sys.path = sys.path[:i] + sys.path[i + 1:]
                 break
         else:
             raise RuntimeError("Failed to remove extensions path from sys.path?")
@@ -81,7 +81,7 @@ import json
 from argparse import ArgumentParser
 from pathlib import Path
 
-from nam.train.full import main as _nam_full, convert
+from nam.train.full import main as _nam_full, convert, inference
 from nam.train.gui import run as nam_gui  # noqa F401 Used as an entry point
 from nam.util import timestamp
 
@@ -136,3 +136,21 @@ def nam_convert():
     with open(args.model_config_path, "r") as fp:
         model_config = json.load(fp)
     convert(model_config, args.source_type, args.target_type, args.source_path, outdir, args.input_sample_size)
+
+def nam_inference():
+    parser = ArgumentParser()
+    parser.add_argument("model_path", type=str)
+    parser.add_argument("model_config_path", type=str)
+    parser.add_argument("input_path", type=str)
+    parser.add_argument("outdir", type=str)
+    args = parser.parse_args()
+
+    def ensure_outdir(outdir: str) -> Path:
+        outdir = Path(outdir)
+        outdir.mkdir(parents=True, exist_ok=True)
+        return outdir
+
+    outdir = ensure_outdir(args.outdir)
+    with open(args.model_config_path, "r") as fp:
+        model_config = json.load(fp)
+    inference(args.model_path, model_config, args.input_path, outdir)

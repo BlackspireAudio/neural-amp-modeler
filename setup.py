@@ -57,6 +57,7 @@ setup(
             "nam = nam.cli:nam_gui",  # GUI trainer
             "nam-full = nam.cli:nam_full",  # Full-featured trainer
             "nam-convert = nam.cli:nam_convert",  # Convert between formats
+            "nam-inference = nam.cli:nam_inference",  
         ]
     },
 )

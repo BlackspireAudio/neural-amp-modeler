@@ -16,12 +16,13 @@ from pytorch_lightning.utilities.warnings import PossibleUserWarning
 import torch
 from torch.utils.data import DataLoader
 
-from nam.data import ConcatDataset, Split, init_dataset
+from nam.data import ConcatDataset, Split, init_dataset, wav_to_tensor
 from nam.models import Model
 from nam.util import filter_warnings
 
 from torchvision import models
 from torchsummary import summary
+import wavio
 
 torch.manual_seed(0)
 
@@ -205,19 +206,15 @@ def main(
 
     print("Exporting onnx model...")
     input_sample_size = 432000
-    # input_sample = torch.randn((1, 48))
-    # input_sample = torch.randn((1, max(model.net._get_dilations())))
     input_sample = torch.randn((1, input_sample_size)).cpu()
-    # input_sample = model.net._export_input_signal()
     summary(model, (input_sample_size,), device="cpu")
-    print(f"input_sample.shape={input_sample.shape}, receptive_field={model.net.receptive_field}, dilations = {model.net._get_dilations()}")
-    # weights = model.net._export_weights()
+    print(f"input_sample.shape={input_sample.shape}, receptive_field={model.net.receptive_field}")
 
-    model.net.export_torch_state_dict(os.path.join(outdir, model_config["net"]["name"] + ".pth"))
-    model.net.export_onnx(os.path.join(outdir, model_config["net"]["name"] + ".onnx"), input_sample)
-    model.to_onnx(os.path.join(outdir, "model.onnx"), input_sample, export_params=True)
     # Export!
     model.net.export(outdir)
+    model.net.export_onnx(os.path.join(outdir, model_config["net"]["name"] + ".onnx"), input_sample)
+    model.net.export_torch_state_dict(os.path.join(outdir, model_config["net"]["name"] + ".pth"))
+    model.to_onnx(os.path.join(outdir, model_config["net"]["name"] + "PL.onnx"), input_sample, export_params=True)
 
 
 def convert(model_config, source_type, target_type, source_path, outdir, input_sample_size):
@@ -239,5 +236,21 @@ def convert(model_config, source_type, target_type, source_path, outdir, input_s
         model.net.export_torch_state_dict(os.path.join(outdir, model_config["net"]["name"] + ".pth"))
     elif target_type == "onnx":
         model.net.export_onnx(os.path.join(outdir, model_config["net"]["name"] + ".onnx"), torch.randn((1, input_sample_size)).cpu())
+        model.net.export(outdir)
+    elif target_type == "nam":
+        model.net.export(outdir)
     else:
         raise ValueError(f"Unknown target type {target_type}")
+
+
+def inference(model_path, model_config, input_path, outdir):
+    model = Model.init_from_config(model_config)
+    # model.net.load_torch_state_dict(model_path)
+
+    model.cpu()
+    model.eval()
+    input, wav_info = wav_to_tensor(input_path, info=True)
+    with torch.no_grad():
+        output = model(input, pad_start=True).flatten().cpu().numpy()
+
+    wavio.write(os.path.join(outdir, "output.wav"), output, wav_info.rate, sampwidth=wav_info.sampwidth)
